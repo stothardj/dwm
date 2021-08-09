@@ -211,6 +211,7 @@ static void sigchld(int unused);
 static void spawn(const Arg *arg);
 static void tag(const Arg *arg);
 static void tagmon(const Arg *arg);
+static void tagrename(const Arg *arg);
 static void tile(Monitor *);
 static void togglebar(const Arg *arg);
 static void togglefloating(const Arg *arg);
@@ -1752,6 +1753,44 @@ tagmon(const Arg *arg)
 	if (!selmon->sel || !mons->next)
 		return;
 	sendmon(selmon->sel, dirtomon(arg->i));
+}
+
+void
+tagrename(const Arg *arg)
+{
+	unsigned int tagset = selmon->tagset[selmon->seltags];
+	char buf[100];
+	char *str = NULL;
+	char *temp = NULL;
+	unsigned int size = 1; // room for null terminator
+	unsigned int strlength;
+	FILE *name = popen("echo -n '' | dmenu", "r");
+	if (!name) {
+		fprintf(stderr, "failed to open dmenu for rename.");
+		perror("popen");
+		return;
+	}
+	while (fgets(buf, 100, name) != NULL) {
+		strlength = strlen(buf);
+		temp = realloc(str, size + strlength);
+		if (temp == NULL) {
+			fprintf(stderr, "failed to allocate for tag rename");
+			break;
+		} else {
+			str = temp;
+		}
+		strcpy(str + size - 1, buf);
+		size += strlength;
+	}
+	// Strip newline
+	str[size - 2] = 0;
+
+	pclose(name);
+
+	for (int i=0; i<LENGTH(tags); ++i) {
+		if (tagset & (1 << i))
+			tags[i] = str;
+	}
 }
 
 void

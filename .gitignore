@@ -3,3 +3,4 @@ tags
 TAGS
 dwm
 *.o
+config.h
