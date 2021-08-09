@@ -162,7 +162,7 @@ static void destroynotify(XEvent *e);
 static void detach(Client *c);
 static void detachstack(Client *c);
 static Monitor *dirtomon(int dir);
-static void dmenureadstr(char* buf, size_t buf_size, char* prompt);
+static void dmenureadstr(char *buf, size_t buf_size, const char *prompt, const char **options, int num_options);
 static void drawbar(Monitor *m);
 static void drawbars(void);
 static void enternotify(XEvent *e);
@@ -190,7 +190,7 @@ static Client *nexttiled(Client *c);
 static void pop(Client *);
 static void propertynotify(XEvent *e);
 static void quit(const Arg *arg);
-static char *readfromdmenu(char *prompt);
+static char *readfromdmenu(const char *prompt, const char **options, int num_options);
 static Monitor *recttomon(int x, int y, int w, int h);
 static void resize(Client *c, int x, int y, int w, int h, int interact);
 static void resizeclient(Client *c, int x, int y, int w, int h);
@@ -704,8 +704,18 @@ dirtomon(int dir)
 }
 
 void
-dmenureadstr(char *buf, size_t buf_size, char *prompt) {
+dmenureadstr(char *buf, size_t buf_size, const char *prompt, const char **options, int num_options) {
 	dmenumon[0] = '0' + selmon->num;
+	strncat(buf, "/usr/bin/echo -ne '", buf_size);
+	buf_size -= 10;
+	for (int i=0; i < num_options; ++i) {
+		strncat(buf, options[i], buf_size);
+		buf_size -= strlen(options[i]);
+		strncat(buf, "\\n", buf_size);
+		buf_size -= 2;
+	}
+	strncat(buf, "' | ", buf_size);
+	buf_size -= 4;
 	int first = 1;
 	for (int i=0; dmenuread[i] != NULL; ++i) {
 		if (!first) {
@@ -1292,10 +1302,10 @@ quit(const Arg *arg)
 }
 
 char *
-readfromdmenu(char *prompt) {
+readfromdmenu(const char *prompt, const char **options, int num_options) {
 	char cmd[1000];
 	cmd[0] = '\0';
-	dmenureadstr(cmd, 1000, prompt);
+	dmenureadstr(cmd, 1000, prompt, options, num_options);
 	FILE *f = popen(cmd, "r");
 
 	char buf[100];
@@ -1832,7 +1842,7 @@ void
 tagrename(const Arg *arg)
 {
 	unsigned int tagset = selmon->tagset[selmon->seltags];
-	char *str = readfromdmenu("name tag: ");
+	char *str = readfromdmenu("name tag: ", NULL, 0);
 	if (str == NULL) return;
 
 	for (int i=0; i<LENGTH(tags); ++i) {
@@ -2222,7 +2232,7 @@ viewbyname(const Arg *arg)
 {
 	Arg view_arg;
 	unsigned int ui = 0;
-	char *str = readfromdmenu("select tag: ");
+	char *str = readfromdmenu("select tag: ", tags, LENGTH(tags));
 	if (str == NULL) return;
 
 	for (int i=0; i<LENGTH(tags); ++i) {
