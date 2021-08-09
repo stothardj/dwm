@@ -162,6 +162,7 @@ static void destroynotify(XEvent *e);
 static void detach(Client *c);
 static void detachstack(Client *c);
 static Monitor *dirtomon(int dir);
+static void dmenureadstr(char* buf, size_t buf_size, char* prompt);
 static void drawbar(Monitor *m);
 static void drawbars(void);
 static void enternotify(XEvent *e);
@@ -189,6 +190,7 @@ static Client *nexttiled(Client *c);
 static void pop(Client *);
 static void propertynotify(XEvent *e);
 static void quit(const Arg *arg);
+static char *readfromdmenu(char *prompt);
 static Monitor *recttomon(int x, int y, int w, int h);
 static void resize(Client *c, int x, int y, int w, int h, int interact);
 static void resizeclient(Client *c, int x, int y, int w, int h);
@@ -231,6 +233,7 @@ static void updatetitle(Client *c);
 static void updatewindowtype(Client *c);
 static void updatewmhints(Client *c);
 static void view(const Arg *arg);
+static void viewbyname(const Arg *arg);
 static Client *wintoclient(Window w);
 static Monitor *wintomon(Window w);
 static int xerror(Display *dpy, XErrorEvent *ee);
@@ -698,6 +701,35 @@ dirtomon(int dir)
 	else
 		for (m = mons; m->next != selmon; m = m->next);
 	return m;
+}
+
+void
+dmenureadstr(char *buf, size_t buf_size, char *prompt) {
+	dmenumon[0] = '0' + selmon->num;
+	int first = 1;
+	for (int i=0; dmenuread[i] != NULL; ++i) {
+		if (!first) {
+			strncat(buf, " ", buf_size);
+			buf_size -= 1;
+		}
+		int quote = !first && dmenuread[i][0] != '-';
+		if (quote) {
+			strncat(buf, "'", buf_size);
+			buf_size -= 1;
+		}
+		strncat(buf, dmenuread[i], buf_size);
+		buf_size -= strlen(dmenuread[i]);
+		if (quote) {
+			strncat(buf, "'", buf_size);
+			buf_size -= 1;
+		}
+		first = 0;
+	}
+	strncat(buf, " -p '", buf_size);
+	buf_size -= 5;
+	strncat(buf, prompt, buf_size);
+	buf_size -= strlen(prompt);
+	strncat(buf, "'", buf_size);
 }
 
 void
@@ -1259,6 +1291,47 @@ quit(const Arg *arg)
 	running = 0;
 }
 
+char *
+readfromdmenu(char *prompt) {
+	char cmd[1000];
+	cmd[0] = '\0';
+	dmenureadstr(cmd, 1000, prompt);
+	FILE *f = popen(cmd, "r");
+
+	char buf[100];
+	char *str = NULL;
+	char *temp = NULL;
+	unsigned int size = 1; // room for null terminator
+	unsigned int strlength;
+
+	if (!f) {
+		fprintf(stderr, "failed to open dmenu.");
+		perror("popen");
+		return NULL;
+	}
+	while (fgets(buf, 100, f) != NULL) {
+		strlength = strlen(buf);
+		temp = realloc(str, size + strlength);
+		if (temp == NULL) {
+			fprintf(stderr, "failed to allocate for dmenu response.");
+			free(str);
+			pclose(f);
+			return NULL;
+		} else {
+			str = temp;
+		}
+		strcpy(str + size - 1, buf);
+		size += strlength;
+	}
+	if (size > 1) {
+		// Strip newline
+		str[size - 2] = 0;
+	}
+
+	pclose(f);
+	return str;
+}
+
 Monitor *
 recttomon(int x, int y, int w, int h)
 {
@@ -1759,37 +1832,12 @@ void
 tagrename(const Arg *arg)
 {
 	unsigned int tagset = selmon->tagset[selmon->seltags];
-	char buf[100];
-	char *str = NULL;
-	char *temp = NULL;
-	unsigned int size = 1; // room for null terminator
-	unsigned int strlength;
-	FILE *name = popen("echo -n '' | dmenu", "r");
-	if (!name) {
-		fprintf(stderr, "failed to open dmenu for rename.");
-		perror("popen");
-		return;
-	}
-	while (fgets(buf, 100, name) != NULL) {
-		strlength = strlen(buf);
-		temp = realloc(str, size + strlength);
-		if (temp == NULL) {
-			fprintf(stderr, "failed to allocate for tag rename");
-			break;
-		} else {
-			str = temp;
-		}
-		strcpy(str + size - 1, buf);
-		size += strlength;
-	}
-	// Strip newline
-	str[size - 2] = 0;
-
-	pclose(name);
+	char *str = readfromdmenu("name tag: ");
+	if (str == NULL) return;
 
 	for (int i=0; i<LENGTH(tags); ++i) {
 		if (tagset & (1 << i))
-			tags[i] = str;
+			tags[i] = str; // TODO: This leaks memory
 	}
 }
 
@@ -2167,6 +2215,23 @@ view(const Arg *arg)
 		selmon->tagset[selmon->seltags] = arg->ui & TAGMASK;
 	focus(NULL);
 	arrange(selmon);
+}
+
+void
+viewbyname(const Arg *arg)
+{
+	Arg view_arg;
+	unsigned int ui = 0;
+	char *str = readfromdmenu("select tag: ");
+	if (str == NULL) return;
+
+	for (int i=0; i<LENGTH(tags); ++i) {
+		ui |= (strcmp(tags[i], str) ? 0 : 1) << i;
+	}
+
+	free(str);
+	view_arg.ui = ui;
+	view(&view_arg);
 }
 
 Client *
