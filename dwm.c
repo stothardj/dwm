@@ -46,6 +46,7 @@
 #include "util.h"
 
 /* macros */
+#define MAX_TAGNAME_LEN 32
 #define BUTTONMASK              (ButtonPressMask|ButtonReleaseMask)
 #define CLEANMASK(mask)         (mask & ~(numlockmask|LockMask) & (ShiftMask|ControlMask|Mod1Mask|Mod2Mask|Mod3Mask|Mod4Mask|Mod5Mask))
 #define INTERSECT(x,y,w,h,m)    (MAX(0, MIN((x)+(w),(m)->wx+(m)->ww) - MAX((x),(m)->wx)) \
@@ -162,7 +163,7 @@ static void destroynotify(XEvent *e);
 static void detach(Client *c);
 static void detachstack(Client *c);
 static Monitor *dirtomon(int dir);
-static void dmenureadstr(char *buf, size_t buf_size, const char *prompt, const char **options, int num_options);
+static void dmenureadstr(char *buf, size_t buf_size, const char *prompt, char options[][MAX_TAGNAME_LEN], int num_options);
 static void drawbar(Monitor *m);
 static void drawbars(void);
 static void enternotify(XEvent *e);
@@ -190,7 +191,7 @@ static Client *nexttiled(Client *c);
 static void pop(Client *);
 static void propertynotify(XEvent *e);
 static void quit(const Arg *arg);
-static char *readfromdmenu(const char *prompt, const char **options, int num_options);
+static char *readfromdmenu(const char *prompt, char options[][MAX_TAGNAME_LEN], int num_options);
 static Monitor *recttomon(int x, int y, int w, int h);
 static void resize(Client *c, int x, int y, int w, int h, int interact);
 static void resizeclient(Client *c, int x, int y, int w, int h);
@@ -704,42 +705,30 @@ dirtomon(int dir)
 }
 
 void
-dmenureadstr(char *buf, size_t buf_size, const char *prompt, const char **options, int num_options) {
+dmenureadstr(char *buf, size_t buf_size, const char *prompt, char options[][MAX_TAGNAME_LEN], int num_options) {
+	char *cur = buf;
 	dmenumon[0] = '0' + selmon->num;
-	strncat(buf, "/usr/bin/echo -ne '", buf_size);
-	buf_size -= 10;
+	cur += snprintf(cur, buf_size, "/usr/bin/echo -ne '");
 	for (int i=0; i < num_options; ++i) {
-		strncat(buf, options[i], buf_size);
-		buf_size -= strlen(options[i]);
-		strncat(buf, "\\n", buf_size);
-		buf_size -= 2;
+		cur += snprintf(cur, buf_size, "%s\\n", options[i]);
 	}
-	strncat(buf, "' | ", buf_size);
-	buf_size -= 4;
+	cur += snprintf(cur, buf_size, "' | ");
 	int first = 1;
 	for (int i=0; dmenuread[i] != NULL; ++i) {
 		if (!first) {
-			strncat(buf, " ", buf_size);
-			buf_size -= 1;
+			cur += snprintf(cur, buf_size, " ");
 		}
 		int quote = !first && dmenuread[i][0] != '-';
 		if (quote) {
-			strncat(buf, "'", buf_size);
-			buf_size -= 1;
+			cur += snprintf(cur, buf_size, "'");
 		}
-		strncat(buf, dmenuread[i], buf_size);
-		buf_size -= strlen(dmenuread[i]);
+		cur += snprintf(cur, buf_size, "%s", dmenuread[i]);
 		if (quote) {
-			strncat(buf, "'", buf_size);
-			buf_size -= 1;
+			cur += snprintf(cur, buf_size, "'");
 		}
 		first = 0;
 	}
-	strncat(buf, " -p '", buf_size);
-	buf_size -= 5;
-	strncat(buf, prompt, buf_size);
-	buf_size -= strlen(prompt);
-	strncat(buf, "'", buf_size);
+	cur += snprintf(cur, buf_size, " -p '%s'", prompt);
 }
 
 void
@@ -1302,7 +1291,7 @@ quit(const Arg *arg)
 }
 
 char *
-readfromdmenu(const char *prompt, const char **options, int num_options) {
+readfromdmenu(const char *prompt, char options[][MAX_TAGNAME_LEN], int num_options) {
 	char cmd[1000];
 	cmd[0] = '\0';
 	dmenureadstr(cmd, 1000, prompt, options, num_options);
@@ -1847,7 +1836,7 @@ tagrename(const Arg *arg)
 
 	for (int i=0; i<LENGTH(tags); ++i) {
 		if (tagset & (1 << i))
-			tags[i] = str; // TODO: This leaks memory
+		  strncpy(tags[i], str, MAX_TAGNAME_LEN);
 	}
 }
 
