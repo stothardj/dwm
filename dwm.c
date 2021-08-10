@@ -1838,6 +1838,7 @@ tagrename(const Arg *arg)
 		if (tagset & (1 << i))
 		  strncpy(tags[i], str, MAX_TAGNAME_LEN);
 	}
+	free(str);
 }
 
 void
